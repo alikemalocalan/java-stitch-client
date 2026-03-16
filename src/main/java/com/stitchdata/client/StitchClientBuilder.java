@@ -1,41 +1,17 @@
 package com.stitchdata.client;
 
-import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.UnsupportedEncodingException;
-import java.io.BufferedReader;
-import java.io.Closeable;
-import java.io.InputStreamReader;
-import java.io.IOException;
-import java.util.Collection;
+import com.cognitect.transit.WriteHandler;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import com.cognitect.transit.Writer;
-import com.cognitect.transit.WriteHandler;
-import com.cognitect.transit.TransitFactory;
-import com.cognitect.transit.Reader;
-import org.apache.http.client.fluent.Request;
-import org.apache.http.client.fluent.Response;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.entity.ContentType;
-import org.apache.http.StatusLine;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpEntity;
-
-import javax.json.Json;
-import javax.json.JsonReader;
 
 /**
  * Use this to build instances of StitchClient.
  *
  * <h3>Basic usage</h3>
- *
+ * <p>
  * Every client must have a client id, access token, and
  * namespace. You should have gotten these parameters when you set up
  * the integration at http://stitchdata.com. You must set them with
@@ -53,7 +29,7 @@ import javax.json.JsonReader;
  * </pre>
  *
  * <h3>Optionally set message defaults</h3>
- *
+ * <p>
  * If your application will send messages into only one table, you can
  * set the table name and key names here with {@link
  * #withTableName(String)} and {@link #withKeyNames(List)}, {@link
@@ -75,7 +51,7 @@ import javax.json.JsonReader;
  * </pre>
  *
  * <h3> Optionally tune batch parameters</h3>
- *
+ * <p>
  * A StitchClient takes records (instances of {@link StitchMessage})
  * and submits them to Stitch in batches. A call to {@link
  * StitchClient#push(StitchMessage)} adds a record to the current
@@ -133,7 +109,8 @@ public class StitchClientBuilder {
     private int batchDelayMillis = DEFAULT_BATCH_DELAY_MILLIS;
     private FlushHandler flushHandler = null;
     private String pushUrl = StitchClient.PUSH_URL;
-    private Map<Class,WriteHandler<?,?>> writeHandlers = null;
+    private Map<Class, WriteHandler<?, ?>> writeHandlers = null;
+
     /**
      * Specify your Stitch client id. This is a required setting.
      *
@@ -219,7 +196,7 @@ public class StitchClientBuilder {
      * key name here. Otherwise, you can set it individually on each
      * message with {@link StitchMessage#withKeyNames}.
      *
-     * @param keyName  key names
+     * @param keyName key names
      * @return this object
      */
     public StitchClientBuilder withKeyName(String keyName) {
@@ -277,7 +254,7 @@ public class StitchClientBuilder {
      * @param writeHandlers the write handlers
      * @return this object
      */
-    public StitchClientBuilder withWriteHandlers(Map<Class,WriteHandler<?,?>> writeHandlers) {
+    public StitchClientBuilder withWriteHandlers(Map<Class, WriteHandler<?, ?>> writeHandlers) {
         this.writeHandlers = writeHandlers;
         return this;
     }
@@ -289,11 +266,11 @@ public class StitchClientBuilder {
      */
     public StitchClient build() {
         return new StitchClient(
-            pushUrl, clientId, token, namespace,
-            tableName, keyNames,
-            batchSizeBytes,
-            batchDelayMillis,
-            flushHandler,
-            writeHandlers);
+                pushUrl, clientId, token, namespace,
+                tableName, keyNames,
+                batchSizeBytes,
+                batchDelayMillis,
+                flushHandler,
+                writeHandlers);
     }
 }

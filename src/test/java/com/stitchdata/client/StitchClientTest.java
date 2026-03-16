@@ -1,19 +1,19 @@
 package com.stitchdata.client;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.io.ByteArrayInputStream;
-import java.io.EOFException;
-import com.cognitect.transit.TransitFactory;
 import com.cognitect.transit.Reader;
-import org.junit.*;
-import static org.junit.Assert.*;
+import com.cognitect.transit.TransitFactory;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.net.http.HttpClient;
+import java.util.*;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Attempts to exercise concurrent calls to {@link
@@ -26,7 +26,7 @@ import static org.junit.Assert.*;
  * some debug print statements that we have used to show that batches
  * at least contain records from multiple threads.
  */
-public class StitchClientTest  {
+public class StitchClientTest {
 
     private static final int NUM_THREADS = 4;
     private static final int NUM_RECORDS_PER_THREAD = 10000;
@@ -43,7 +43,7 @@ public class StitchClientTest  {
     private class DummyStitchClient extends StitchClient {
 
         DummyStitchClient(FlushHandler flushHandler) {
-            super("", 0, null, null, null, Arrays.asList(new String[] { "id" }), StitchClientBuilder.DEFAULT_BATCH_SIZE_BYTES, 60000000, flushHandler, null);
+            super("", 0, null, null, null, Arrays.asList(new String[]{"id"}), StitchClientBuilder.DEFAULT_BATCH_SIZE_BYTES, 60000000, flushHandler, null);
         }
 
         @Override
@@ -57,8 +57,8 @@ public class StitchClientTest  {
                 counts[i] = 0;
             }
             for (Object record : records) {
-                Map data = (Map) ((Map)record).get("data");
-                int threadId = ((Long) ((Map)data).get("threadId")).intValue();
+                Map data = (Map) ((Map) record).get("data");
+                int threadId = ((Long) ((Map) data).get("threadId")).intValue();
                 counts[threadId]++;
                 numRecordsByThreadId.get(threadId).incrementAndGet();
             }
@@ -106,16 +106,14 @@ public class StitchClientTest  {
                 record.put("recordId", recordId);
                 try {
                     StitchMessage message = StitchMessage.newUpsert()
-                        .withSequence(0)
-                        .withData(record);
+                            .withSequence(0)
+                            .withData(record);
                     if (useCallback) {
                         stitch.push(message, String.format("thread-%d-record-%d", threadId, recordId));
-                    }
-                    else {
+                    } else {
                         stitch.push(message);
                     }
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -153,9 +151,21 @@ public class StitchClientTest  {
 
     }
 
+    @Test
+    public void testUsesHttp11Client() throws Exception {
+        try (StitchClient stitch = new DummyStitchClient(null)) {
+            Field httpClientField = StitchClient.class.getDeclaredField("httpClient");
+            httpClientField.setAccessible(true);
+            HttpClient httpClient = (HttpClient) httpClientField.get(stitch);
+
+            assertEquals(HttpClient.Version.HTTP_1_1, httpClient.version());
+        }
+    }
+
     private static class SetFlushHandler implements FlushHandler {
         final ConcurrentSkipListSet callbackArgsReceived =
-            new ConcurrentSkipListSet();
+                new ConcurrentSkipListSet();
+
         public void onFlush(List arg) {
             callbackArgsReceived.addAll(arg);
         }

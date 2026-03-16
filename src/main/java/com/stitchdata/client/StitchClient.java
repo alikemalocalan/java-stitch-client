@@ -1,38 +1,31 @@
 package com.stitchdata.client;
 
-import java.io.Closeable;
-import java.io.EOFException;
-import java.io.Flushable;
-import java.io.IOException;
-import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.UnsupportedEncodingException;
-
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.HashMap;
-import org.apache.http.client.fluent.Request;
-import org.apache.http.client.fluent.Response;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.entity.ContentType;
-import org.apache.http.StatusLine;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpEntity;
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonReader;
-import com.cognitect.transit.Writer;
-import com.cognitect.transit.WriteHandler;
-import com.cognitect.transit.TransitFactory;
 import com.cognitect.transit.Reader;
+import com.cognitect.transit.TransitFactory;
+import com.cognitect.transit.WriteHandler;
+import com.cognitect.transit.Writer;
+import jakarta.json.Json;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonReader;
+
+import java.io.*;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Client for Stitch.
  *
  * <p>Callers should use {@link StitchClientBuilder} to construct
  * instances of {@link StitchClient}.</p>
- *
+ * <p>
  * A StitchClient takes messages (instances of {@link StitchMessage})
  * and submits them to Stitch in batches. A call to {@link
  * StitchClient#push(StitchMessage)} adds a message to the current
@@ -46,7 +39,7 @@ import com.cognitect.transit.Reader;
  * batchSizeBytes to 0 will effectively disable batching and cause
  * each call to {@link #push(StitchMessage)} to send the message
  * immediatley.
- *
+ * <p>
  * You should open the client in a try-with-resources statement to
  * ensure that it is closed, otherwise you will lose any messages that
  * have been added to the buffer but not yet delivered.
@@ -72,7 +65,7 @@ import com.cognitect.transit.Reader;
  * }
  * }
  * </pre>
- *
+ * <p>
  * Instances of StitchClient are thread-safe. If buffering is enabled
  * (which it is by default), then multiple threads will accumulate
  * records into the same batch. When one of those threads makes a call
@@ -88,14 +81,14 @@ public class StitchClient implements Flushable, Closeable {
 
     // HTTP constants
     public static final String PUSH_URL
-        = "https://api.stitchdata.com/v2/import/push";
+            = "https://api.stitchdata.com/v2/import/push";
     private static final int HTTP_CONNECT_TIMEOUT = 1000 * 60 * 2;
-    private static final ContentType CONTENT_TYPE =
-        ContentType.create("application/transit+json");
+    private static final String CONTENT_TYPE = "application/transit+json";
 
     // HTTP properties
     private final int connectTimeout = HTTP_CONNECT_TIMEOUT;
     private final String stitchUrl;
+    private final HttpClient httpClient;
 
     // Client-specific message values
     private final int clientId;
@@ -111,7 +104,7 @@ public class StitchClient implements Flushable, Closeable {
 
     private final Buffer buffer;
     private final FlushHandler flushHandler;
-    private final Map<Class,WriteHandler<?,?>> writeHandlers;
+    private final Map<Class, WriteHandler<?, ?>> writeHandlers;
 
     private static void putWithDefault(Map map, String key, Object value, Object defaultValue) {
         map.put(key, value != null ? value : defaultValue);
@@ -128,15 +121,16 @@ public class StitchClient implements Flushable, Closeable {
         HashMap map = new HashMap();
 
         switch (message.getAction()) {
-        case UPSERT:
-            map.put("action", "upsert");
-            putWithDefault(map, "key_names", message.getKeyNames(), keyNames);
-            putIfNotNull(map, "data", message.getData());
-            break;
-        case SWITCH_VIEW:
-            map.put("action", "switch_view");
-            break;
-        default: throw new IllegalArgumentException("Action must not be null");
+            case UPSERT:
+                map.put("action", "upsert");
+                putWithDefault(map, "key_names", message.getKeyNames(), keyNames);
+                putIfNotNull(map, "data", message.getData());
+                break;
+            case SWITCH_VIEW:
+                map.put("action", "switch_view");
+                break;
+            default:
+                throw new IllegalArgumentException("Action must not be null");
         }
 
         map.put("client_id", clientId);
@@ -153,17 +147,16 @@ public class StitchClient implements Flushable, Closeable {
     }
 
     StitchClient(
-        String stitchUrl,
-        int clientId,
-        String token,
-        String namespace,
-        String tableName,
-        List<String> keyNames,
-        int batchSizeBytes,
-        int batchDelayMillis,
-        FlushHandler flushHandler,
-        Map<Class,WriteHandler<?,?>> writeHandlers)
-    {
+            String stitchUrl,
+            int clientId,
+            String token,
+            String namespace,
+            String tableName,
+            List<String> keyNames,
+            int batchSizeBytes,
+            int batchDelayMillis,
+            FlushHandler flushHandler,
+            Map<Class, WriteHandler<?, ?>> writeHandlers) {
         this.stitchUrl = stitchUrl;
         this.clientId = clientId;
         this.token = token;
@@ -175,6 +168,10 @@ public class StitchClient implements Flushable, Closeable {
         this.buffer = new Buffer();
         this.flushHandler = flushHandler;
         this.writeHandlers = TransitFactory.writeHandlerMap(writeHandlers);
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(connectTimeout))
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
     }
 
     /**
@@ -192,8 +189,8 @@ public class StitchClient implements Flushable, Closeable {
      * @param message the message
      * @throws StitchException if Stitch rejected or was unable to
      *                         process the message
-     * @throws IOException if there was an error communicating with
-     *                     Stitch
+     * @throws IOException     if there was an error communicating with
+     *                         Stitch
      */
     public void push(StitchMessage message) throws StitchException, IOException {
         push(message, message);
@@ -217,13 +214,13 @@ public class StitchClient implements Flushable, Closeable {
      * sent immediately and this function will block until it is
      * delivered.</p>
      *
-     * @param message the message
-     * @param callbackArg flush handler will be invoked with this as 
+     * @param message     the message
+     * @param callbackArg flush handler will be invoked with this as
      *                    one of the callbackArgs.
      * @throws StitchException if Stitch rejected or was unable to
      *                         process the message
-     * @throws IOException if there was an error communicating with
-     *                     Stitch
+     * @throws IOException     if there was an error communicating with
+     *                         Stitch
      */
     public void push(StitchMessage message, Object callbackArg) throws StitchException, IOException {
         buffer.put(new Buffer.Entry(messageToBytes(message), callbackArg));
@@ -234,26 +231,43 @@ public class StitchClient implements Flushable, Closeable {
     }
 
     StitchResponse sendToStitch(String body) throws IOException {
-        Request request = Request.Post(stitchUrl)
-            .connectTimeout(connectTimeout)
-            .addHeader("Authorization", "Bearer " + token)
-            .bodyString(body, CONTENT_TYPE);
+        HttpRequest request = HttpRequest.newBuilder(URI.create(stitchUrl))
+                .header("Authorization", "Bearer " + token)
+                .header("Content-Type", CONTENT_TYPE)
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
 
-        HttpResponse response = request.execute().returnResponse();
-        int statusCode = response.getStatusLine().getStatusCode();
-        String reasonPhrase = response.getStatusLine().getReasonPhrase();
-        ContentType contentType = ContentType.get(response.getEntity());
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while sending request to Stitch", e);
+        }
+
+        int statusCode = response.statusCode();
+        String reasonPhrase = "";
+        String contentType = response.headers().firstValue("Content-Type").orElse(null);
         JsonObject content = null;
 
         // Don't attempt to parse body for 5xx responses or if the
         // Content-Type doesn't explicitly state application/json.
-        if (statusCode < 500 &&
-            contentType != null &&
-            ContentType.APPLICATION_JSON.getMimeType().equals(contentType.getMimeType())) {
-            JsonReader rdr = Json.createReader(response.getEntity().getContent());
+        if (statusCode < 500 && isJsonContentType(contentType)) {
+            JsonReader rdr = Json.createReader(new StringReader(response.body()));
             content = rdr.readObject();
         }
         return new StitchResponse(statusCode, reasonPhrase, content);
+    }
+
+    private static boolean isJsonContentType(String contentTypeHeader) {
+        if (contentTypeHeader == null) {
+            return false;
+        }
+        int separator = contentTypeHeader.indexOf(';');
+        String mimeType = separator >= 0
+                ? contentTypeHeader.substring(0, separator).trim()
+                : contentTypeHeader.trim();
+        return "application/json".equalsIgnoreCase(mimeType);
     }
 
     void sendBatch(List<Buffer.Entry> batch) throws IOException {
@@ -285,7 +299,7 @@ public class StitchClient implements Flushable, Closeable {
         for (Buffer.Entry entry : entries) {
             ByteArrayInputStream bais = new ByteArrayInputStream(entry.bytes);
             Reader reader = TransitFactory.reader(TransitFactory.Format.JSON, bais);
-            messages.add((Map)reader.read());
+            messages.add((Map) reader.read());
         }
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -299,8 +313,8 @@ public class StitchClient implements Flushable, Closeable {
      *
      * @throws StitchException if Stitch rejected or was unable to
      *                         process the message
-     * @throws IOException if there was an error communicating with
-     *                     Stitch
+     * @throws IOException     if there was an error communicating with
+     *                         Stitch
      */
     public void flush() throws IOException {
         while (true) {
@@ -317,8 +331,8 @@ public class StitchClient implements Flushable, Closeable {
      *
      * @throws StitchException if Stitch rejected or was unable to
      *                         process the message
-     * @throws IOException if there was an error communicating with
-     *                     Stitch
+     * @throws IOException     if there was an error communicating with
+     *                         Stitch
      */
     public void close() throws IOException {
         flush();

@@ -1,16 +1,9 @@
 package com.stitchdata.client;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
 import java.util.LinkedList;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import com.cognitect.transit.Writer;
-import com.cognitect.transit.TransitFactory;
-import com.cognitect.transit.Reader;
+import java.util.List;
+import java.util.Queue;
 
 public class Buffer {
 
@@ -31,9 +24,9 @@ public class Buffer {
         }
 
         boolean ready =
-            availableBytes >= batchSizeBytes ||
-            queue.size() >= MAX_MESSAGES_PER_BATCH ||
-            System.currentTimeMillis() - queue.peek().entryTime >= batchDelayMillis;
+                availableBytes >= batchSizeBytes ||
+                        queue.size() >= MAX_MESSAGES_PER_BATCH ||
+                        System.currentTimeMillis() - queue.peek().entryTime >= batchDelayMillis;
 
         if (!ready) {
             return null;
@@ -44,7 +37,7 @@ public class Buffer {
         // Start size at 2 to allow for opening and closing brackets
         int size = 2;
         while (!queue.isEmpty() &&
-               size + queue.peek().bytes.length < MAX_BATCH_SIZE_BYTES) {
+                size + queue.peek().bytes.length < MAX_BATCH_SIZE_BYTES) {
             Entry entry = queue.remove();
             // Add size of record plus the comma delimiter
             size += entry.bytes.length + 1;
@@ -69,8 +62,8 @@ public class Buffer {
             // We need two extra bytes for the [ and ] wrapping the record.
             if (bytes.length > MAX_BATCH_SIZE_BYTES - 2) {
                 throw new IllegalArgumentException(
-                    "Can't accept a record larger than " + (MAX_BATCH_SIZE_BYTES - 2)
-                    + " bytes");
+                        "Can't accept a record larger than " + (MAX_BATCH_SIZE_BYTES - 2)
+                                + " bytes");
             }
         }
     }

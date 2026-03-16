@@ -1,20 +1,22 @@
 package com.stitchdata.client;
 
+import com.cognitect.transit.TransitFactory;
+import com.cognitect.transit.Writer;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.io.ByteArrayOutputStream;
-import com.cognitect.transit.Writer;
-import com.cognitect.transit.WriteHandler;
-import com.cognitect.transit.TransitFactory;
-import com.cognitect.transit.Reader;
 import java.util.Arrays;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import org.junit.*;
+
 import static org.junit.Assert.*;
 
-public class BufferTest  {
+public class BufferTest {
 
     static final Map tinyRecord = new HashMap();
     static final Map bigRecord = new HashMap();
@@ -50,7 +52,7 @@ public class BufferTest  {
     }
 
     public String takeBatchBody(int batchSizeBytes, int batchDelayMillis)
-        throws UnsupportedEncodingException {
+            throws UnsupportedEncodingException {
         List<Buffer.Entry> entries = buffer.take(batchSizeBytes, batchDelayMillis);
         return entries == null ? null : StitchClient.serializeEntries(entries);
     }
@@ -69,8 +71,8 @@ public class BufferTest  {
         assertNull(takeBatchBody(36, Integer.MAX_VALUE));
         putMessage(tinyRecord);
         assertEquals(
-            "[" + tinyResult + "," + tinyResult + "," + tinyResult + "]",
-            takeBatchBody(36, Integer.MAX_VALUE));
+                "[" + tinyResult + "," + tinyResult + "," + tinyResult + "]",
+                takeBatchBody(36, Integer.MAX_VALUE));
     }
 
     @Test
@@ -99,7 +101,7 @@ public class BufferTest  {
         assertNull(batch3);
     }
 
-    @Test(expected=IllegalArgumentException.class)
+    @Test(expected = IllegalArgumentException.class)
     public void assertCantPutRecordLargerThanMaxMessageSize() {
         putMessage(hugeRecord);
     }

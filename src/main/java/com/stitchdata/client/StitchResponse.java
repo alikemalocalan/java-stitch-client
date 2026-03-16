@@ -1,7 +1,7 @@
 package com.stitchdata.client;
-import javax.json.JsonReader;
-import javax.json.Json;
-import javax.json.JsonObject;
+
+
+import jakarta.json.JsonObject;
 
 /**
  * Encapsulates a response received from Stitch.
